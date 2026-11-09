@@ -55,7 +55,7 @@ export function addFromRecipe(list, recipe, missing, factory) {
       const sources = prev
         ? target.sources.map((s) => (s.recipeId === recipe.id ? { ...s, recipeName: recipe.name, quantity: round3(contribution) } : s))
         : [...target.sources, { recipeId: recipe.id, recipeName: recipe.name, quantity: round3(contribution) }];
-      const updated = { ...target, quantity: round3(Math.max(target.quantity + delta, 0)), sources, updatedAt: factory.now() };
+      const updated = { ...target, quantity: round3(Math.max(target.quantity + delta, contribution)), sources, updatedAt: factory.now() };
       out = out.map((x) => (x.id === target.id ? updated : x));
       if (prev) stats.updated++; else stats.merged++;
     } else {
@@ -101,7 +101,15 @@ export function pendingQuantityFor(list, key, unit) {
 }
 
 export function setChecked(item, checked, now) {
-  return { ...item, checked, checkedAt: checked ? now : null, updatedAt: now };
+  // Al desmarcar, vuelve a poder pasarse al inventario en la próxima compra.
+  return { ...item, checked, checkedAt: checked ? now : null, addedToInventory: checked ? item.addedToInventory : false, updatedAt: now };
+}
+
+/** Convierte las etiquetas a una nueva unidad (o las quita si no es compatible). */
+export function convertSources(sources, from, to) {
+  if (from === to) return sources;
+  if (!areCompatible(from, to)) return [];
+  return sources.map((s) => ({ ...s, quantity: convert(s.quantity, from, to) }));
 }
 
 /** Agrupa por categoría respetando el orden del catálogo. */

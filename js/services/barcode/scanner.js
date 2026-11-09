@@ -23,9 +23,11 @@ export class BarcodeScanner {
     this.lastCode = null;
     this.hits = 0;
     this.torchOn = false;
+    this.generation = 0;
   }
 
   async start() {
+    const gen = ++this.generation;
     if (!window.isSecureContext) throw new ScannerError('insecure', 'La cámara solo funciona en conexiones seguras (HTTPS)');
     if (!cameraSupported()) throw new ScannerError('unsupported', 'Este navegador no permite usar la cámara');
     try {
@@ -39,6 +41,12 @@ export class BarcodeScanner {
       if (n === 'NotFoundError' || n === 'OverconstrainedError') throw new ScannerError('notfound', 'No se ha encontrado ninguna cámara');
       if (n === 'NotReadableError') throw new ScannerError('busy', 'La cámara está siendo usada por otra app');
       throw new ScannerError('unknown', 'No se pudo abrir la cámara');
+    }
+    if (gen !== this.generation) {
+      // Se cerró (o se reinició) mientras se pedía la cámara: apagarla y no seguir.
+      this.stream.getTracks().forEach((t) => t.stop());
+      this.stream = null;
+      return;
     }
     this.video.srcObject = this.stream;
     this.video.setAttribute('playsinline', '');
@@ -69,6 +77,7 @@ export class BarcodeScanner {
   }
 
   stop() {
+    this.generation++;
     this.running = false;
     clearTimeout(this.timer);
     this.stream?.getTracks().forEach((t) => t.stop());
@@ -83,7 +92,7 @@ export class BarcodeScanner {
       if (code) {
         // Confirmación: el mismo código en dos lecturas seguidas evita falsos positivos.
         if (code === this.lastCode) this.hits++; else { this.lastCode = code; this.hits = 1; }
-        if (this.hits >= 2) { this.running = false; this.onDetect?.(code); return; }
+        if (this.hits >= 2 && this.running) { this.running = false; this.onDetect?.(code); return; }
       }
     } catch (e) { console.warn('scan', e); }
     this.timer = setTimeout(() => this.loop(), this.interval);

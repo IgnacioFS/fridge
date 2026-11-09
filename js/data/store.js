@@ -20,6 +20,12 @@ export class ValidationError extends Error {
   constructor(errors) { super('Revisa los campos marcados'); this.errors = errors; }
 }
 
+const MUTATORS = [
+  'saveItem', 'deleteItem', 'adjustItem', 'mergeIntoItem', 'setItemQuantity', 'saveRecipe', 'deleteRecipe',
+  'addShopping', 'updateShopping', 'deleteShopping', 'toggleShopping', 'removeShoppingSource',
+  'addMissingToShopping', 'clearPurchased', 'purchaseToInventory', 'restock', 'setSettings',
+];
+
 export class Store extends EventTarget {
   constructor(repos, { clock = () => new Date() } = {}) {
     super();
@@ -31,7 +37,25 @@ export class Store extends EventTarget {
       now: () => this.clock().toISOString(),
       create: (o) => { const t = this.clock().toISOString(); return { id: uuid(), createdAt: t, updatedAt: t, ...o }; },
     };
+    // Todas las escrituras pasan por una cola: dos pulsaciones seguidas nunca calculan sobre
+    // el mismo estado ni dejan registros «fantasma» en IndexedDB. Las llamadas internas usan
+    // la versión sin cola (prefijo «_») para no bloquearse a sí mismas.
+    this._queue = Promise.resolve();
+    for (const m of MUTATORS) {
+      const impl = this[m].bind(this);
+      this[`_${m}`] = impl;
+      this[m] = (...args) => this.serial(() => impl(...args));
+    }
   }
+
+  serial(fn) {
+    const run = this._queue.then(fn, fn);
+    this._queue = run.catch(() => {});
+    return run;
+  }
+
+  /** Envuelve una función de deshacer para que también pase por la cola. */
+  undoable(fn) { return () => this.serial(fn); }
 
   get persistent() { return this.repos.persistent; }
   now() { return this.clock(); }
@@ -88,7 +112,7 @@ export class Store extends EventTarget {
     await this.repos.inventory.delete(id);
     this.state.inventory = this.state.inventory.filter((x) => x.id !== id);
     this.emit('inventory');
-    return async () => { await this.repos.inventory.put(prev); this.replaceIn('inventory', prev); this.emit('inventory'); };
+    return this.undoable(async () => { await this.repos.inventory.put(prev); this.replaceIn('inventory', prev); this.emit('inventory'); });
   }
 
   async adjustItem(id, delta) {
@@ -118,7 +142,7 @@ export class Store extends EventTarget {
   async setItemQuantity(id, quantity) {
     const prev = this.getItem(id);
     if (!prev) return null;
-    return this.adjustItem(id, Number(quantity) - Number(prev.quantity));
+    return this._adjustItem(id, Number(quantity) - Number(prev.quantity));
   }
 
   // ───────────────────────── Recetas
@@ -155,7 +179,7 @@ export class Store extends EventTarget {
     this.state.recipes = this.state.recipes.filter((x) => x.id !== id);
     this.emit('recipes');
     // Las etiquetas de la compra se conservan con el nombre de la receta (histórico).
-    return async () => { await this.repos.recipes.put(prev); this.replaceIn('recipes', prev); this.emit('recipes'); };
+    return this.undoable(async () => { await this.repos.recipes.put(prev); this.replaceIn('recipes', prev); this.emit('recipes'); });
   }
 
   // ───────────────────────── Compra
@@ -176,7 +200,11 @@ export class Store extends EventTarget {
     if (!prev) return null;
     const r = validateShopping({ ...prev, ...input });
     if (!r.ok) throw new ValidationError(r.errors);
-    const next = { ...prev, ...r.value, category: r.value.category || prev.category, updatedAt: this.factory.now() };
+    const next = {
+      ...prev, ...r.value, category: r.value.category || prev.category,
+      sources: Shop.convertSources(prev.sources || [], prev.unit, r.value.unit),
+      updatedAt: this.factory.now(),
+    };
     await this.repos.shopping.put(next);
     this.replaceIn('shopping', next);
     this.emit('shopping');
@@ -189,7 +217,7 @@ export class Store extends EventTarget {
     await this.repos.shopping.delete(id);
     this.state.shopping = this.state.shopping.filter((x) => x.id !== id);
     this.emit('shopping');
-    return async () => { await this.repos.shopping.put(prev); this.replaceIn('shopping', prev); this.emit('shopping'); };
+    return this.undoable(async () => { await this.repos.shopping.put(prev); this.replaceIn('shopping', prev); this.emit('shopping'); });
   }
 
   async toggleShopping(id, checked) {
@@ -228,7 +256,7 @@ export class Store extends EventTarget {
     for (const g of gone) await this.repos.shopping.delete(g.id);
     this.state.shopping = this.state.shopping.filter((x) => !x.checked);
     this.emit('shopping');
-    return async () => { await this.repos.shopping.putMany(gone); this.state.shopping = [...this.state.shopping, ...gone]; this.emit('shopping'); };
+    return this.undoable(async () => { await this.repos.shopping.putMany(gone); this.state.shopping = [...this.state.shopping.filter((x) => !gone.some((g) => g.id === x.id)), ...gone]; this.emit('shopping'); });
   }
 
   /**
@@ -238,11 +266,12 @@ export class Store extends EventTarget {
   async purchaseToInventory(shoppingId, opts) {
     const s = this.getShopping(shoppingId);
     if (!s) throw new Error('El producto ya no está en la lista');
+    if (s.addedToInventory) throw new Error(`«${s.name}» ya se añadió al inventario`);
     let saved;
     if (opts.mode === 'merge' && opts.targetId) {
-      saved = await this.mergeIntoItem(opts.targetId, opts);
+      saved = await this._mergeIntoItem(opts.targetId, opts);
     } else {
-      saved = await this.saveItem({
+      saved = await this._saveItem({
         name: s.name, category: s.category, quantity: opts.quantity, unit: opts.unit,
         location: opts.location || defaultLocationFor(s.category), expiry: opts.expiry || null,
       });
@@ -257,7 +286,7 @@ export class Store extends EventTarget {
 
   /** Añade a la compra un producto agotado del inventario. */
   async restock(item) {
-    return this.addShopping({ name: item.name, quantity: 1, unit: ['g', 'kg', 'ml', 'l', 'cl'].includes(item.unit) ? 'ud' : item.unit, category: item.category });
+    return this._addShopping({ name: item.name, quantity: 1, unit: ['g', 'kg', 'ml', 'l', 'cl'].includes(item.unit) ? 'ud' : item.unit, category: item.category });
   }
 
   // ───────────────────────── Ajustes

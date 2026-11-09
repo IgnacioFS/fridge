@@ -103,9 +103,8 @@ export function openRecipeForm(ctx, { recipe = null, onSaved = null } = {}) {
     } catch (e) {
       if (e instanceof ValidationError) {
         // Errores de filas de ingredientes: se indexan sobre las filas no vacías.
-        const nonEmpty = rows.filter((r) => { const v = r.read(); return v.name.trim() || String(v.quantity).trim(); });
         rows.forEach((r) => r.setError(null));
-        nonEmpty.forEach((r, i) => {
+        rows.forEach((r, i) => {
           const m = e.errors[`ing.${i}.name`] || e.errors[`ing.${i}.quantity`] || e.errors[`ing.${i}.unit`];
           r.setError(m);
         });

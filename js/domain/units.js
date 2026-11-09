@@ -97,7 +97,7 @@ export function stepFor(unit, quantity = 0) {
 /** Interpreta texto como «500 g», «1,5 l», «6 x 125 g», «1L». Devuelve {quantity, unit} o null. */
 export function parseQuantityText(text) {
   if (!text) return null;
-  const t = String(text).toLowerCase().replace(',', '.').trim();
+  const t = String(text).toLowerCase().replace(/(\d{1,3})\.(\d{3})(?!\d)/g, '$1$2').replace(',', '.').trim();
   const multi = t.match(/(\d+)\s*[x×]\s*(\d+(?:\.\d+)?)\s*(kg|g|ml|cl|l)\b/);
   if (multi) {
     const total = Number(multi[1]) * Number(multi[2]);

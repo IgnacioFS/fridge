@@ -59,14 +59,38 @@ export class MemoryRepository {
   async putMany(objs) { for (const o of objs) this.map.set(o.id, structuredClone(o)); return objs; }
 }
 
+/** Sustituye el contenido de varios almacenes en UNA transacción: o todo o nada. */
+function replaceAllIDB(db, data) {
+  return new Promise((resolve, reject) => {
+    const names = Object.keys(data);
+    const t = db.transaction(names, 'readwrite');
+    for (const n of names) {
+      const s = t.objectStore(n);
+      s.clear();
+      for (const o of data[n]) s.put(o);
+    }
+    t.oncomplete = () => resolve();
+    t.onerror = () => reject(t.error);
+    t.onabort = () => reject(t.error || new Error('Importación cancelada'));
+  });
+}
+
 export async function createRepositories({ memory = false } = {}) {
   if (!memory) {
     try {
       const db = await openDB();
-      return { persistent: true, ...Object.fromEntries(STORES.map((s) => [s, new IDBRepository(db, s)])) };
+      return {
+        persistent: true,
+        ...Object.fromEntries(STORES.map((s) => [s, new IDBRepository(db, s)])),
+        replaceAll: (data) => replaceAllIDB(db, data),
+      };
     } catch (e) {
       console.error('IndexedDB no disponible, se usa memoria', e);
     }
   }
-  return { persistent: false, ...Object.fromEntries(STORES.map((s) => [s, new MemoryRepository()])) };
+  const repos = { persistent: false, ...Object.fromEntries(STORES.map((s) => [s, new MemoryRepository()])) };
+  repos.replaceAll = async (data) => {
+    for (const [n, list] of Object.entries(data)) { await repos[n].clear(); await repos[n].putMany(list); }
+  };
+  return repos;
 }

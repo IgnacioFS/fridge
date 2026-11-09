@@ -54,10 +54,10 @@
 - [x] Indicador «En la lista: X» en la receta
 
 ### ✅ Fase 7 — Pruebas
-- [x] 48 pruebas unitarias (`npm test`)
-- [x] 26 escenarios E2E en Chrome con viewport de iPhone (`tests/e2e/e2e.mjs`)
+- [x] 60 pruebas unitarias (`npm test`), incluidas regresiones de la revisión QA
+- [x] 29 escenarios E2E en Chrome con viewport de iPhone (`tests/e2e/e2e.mjs`)
 - [x] Capturas en claro/oscuro × iPhone SE / 13 / Pro Max, sin desbordes horizontales
-- [~] Revisión independiente por subagente QA (en curso)
+- [x] Revisión independiente por subagente QA: 22 hallazgos, 20 corregidos (ver abajo)
 
 ## Errores encontrados y corregidos
 | Error | Causa | Corrección |
@@ -68,6 +68,32 @@
 | Un aviso tapaba el botón principal de la hoja | El toast seguía visible al abrir la hoja | Se oculta al abrir una hoja |
 | El decodificador fallaba con desenfoque | Umbral simple pierde barras finas | Modo por bordes con precisión subpíxel + 2 umbrales |
 | Respuestas del service worker | `clone()` tras consumir el cuerpo | Clonar antes |
+
+### Hallazgos de la revisión QA corregidos
+| # | Problema | Corrección |
+|---|---|---|
+| 1 | Dobles pulsaciones dejaban registros «fantasma» en IndexedDB | Cola única de escrituras en el store + bloqueos en botones |
+| 2 | Confirmar una compra dos veces la sumaba dos veces | Bloqueo en la hoja y el store rechaza lo ya añadido |
+| 3 | Importar una copia dañada borraba los datos | Validación completa previa + transacción única (todo o nada) |
+| 4 | Cerrar el escáner mientras se abría la cámara la dejaba encendida | Cancelación por generación |
+| 5 | Plurales mal singularizados («verdes»→«verd») | Reglas revisadas |
+| 6 | «leche de coco» contaba como «leche» | Coincidencias dudosas no cuentan; el usuario decide («¿Sirve…?») |
+| 7 | Un producto cubría dos ingredientes | Reparto del inventario entre ingredientes |
+| 8 | Ingredientes repetidos en una receta se pisaban | Se suman |
+| 9 | Cambiar la unidad de una línea corrompía sus etiquetas | Conversión de etiquetas |
+| 10 | Reañadir receta tras bajar la cantidad dejaba 0 | Nunca por debajo de lo que pide la receta |
+| 11 | Sumar a un producto agotado heredaba su caducidad vieja | Se toma la nueva |
+| 12 | Ubicación oculta al cambiar a unidad incompatible | Se vuelve a mostrar |
+| 13 | Errores del formulario de receta en la fila equivocada | Mismo índice |
+| 14 | Service worker podía cachear archivos viejos | `cache: 'reload'` + `waitUntil` |
+| 15 | Reescanear compartía la foto entre productos | No se reutiliza |
+| 16 | «1.000 g» de Open Food Facts se leía como 1 g | Separador de miles |
+| 17 | Producto escaneado sin categoría no se autocategorizaba | Sugerencia al abrir |
+| 18 | Desmarcar no permitía volver a pasar al inventario | Se reinicia |
+| 20 | Días de aviso sin límite | 1–30 |
+| 21–22 | Teclado/VoiceOver y textos que remitían a ajustes inexistentes | Corregidos |
+
+Sin corregir (menor): #19 al quitar una etiqueta se descarta la cantidad que se estuviera escribiendo en ese momento; el foco no queda atrapado dentro de las hojas.
 
 ## ⛔ Bloqueado / pendiente del usuario
 - [ ] Activar GitHub Pages (Settings → Pages → Deploy from a branch → main / root). Mi acceso no permite cambiar ajustes del repositorio.

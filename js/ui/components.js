@@ -5,6 +5,11 @@ import { UNITS, UNIT_ORDER, stepFor, formatNumber } from '../domain/units.js';
 import { expiryStatus, expiryLabel, addDays, todayISO } from '../domain/dates.js';
 import { parseNumber } from '../domain/validation.js';
 
+/** Activa con Enter o Espacio un elemento con role="button". */
+export function pressKey(e) {
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.currentTarget.click(); }
+}
+
 // ───────────────────────── Hoja modal inferior
 const sheetStack = [];
 
@@ -21,7 +26,8 @@ export function openSheet({ title, content, primary = null, onClose = null, full
     ? h('button', { class: 'sheet-action primary', type: 'button', onClick: () => primary.onClick?.(api) }, primary.label)
     : null;
   const body = h('div', { class: 'sheet-body' }, content);
-  const panel = h('div', { class: ['sheet', full && 'sheet-full', className], role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': titleId },
+  const opener = document.activeElement;
+  const panel = h('div', { class: ['sheet', full && 'sheet-full', className], role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': titleId, tabindex: '-1' },
     h('div', { class: 'sheet-grabber', 'aria-hidden': 'true' }),
     h('header', { class: 'sheet-header' },
       h('button', { class: 'sheet-action', type: 'button', onClick: () => close() }, cancelLabel),
@@ -32,7 +38,7 @@ export function openSheet({ title, content, primary = null, onClose = null, full
   const wrap = h('div', { class: 'sheet-wrap' }, backdrop, panel);
   root.appendChild(wrap);
   document.body.classList.add('has-sheet');
-  requestAnimationFrame(() => wrap.classList.add('open'));
+  requestAnimationFrame(() => { wrap.classList.add('open'); if (!panel.contains(document.activeElement)) panel.focus({ preventScroll: true }); });
 
   // Arrastrar hacia abajo para cerrar (desde la cabecera).
   let startY = null, dy = 0;
@@ -56,6 +62,7 @@ export function openSheet({ title, content, primary = null, onClose = null, full
     if (i >= 0) sheetStack.splice(i, 1);
     if (!sheetStack.length) document.body.classList.remove('has-sheet');
     setTimeout(() => wrap.remove(), 260);
+    if (opener?.isConnected && !sheetStack.length) opener.focus?.({ preventScroll: true });
     onClose?.(result);
   }
   const api = {
@@ -194,14 +201,14 @@ export function segmented({ options, value, name, onChange, small = false, ariaL
 
 /** Fila de chips con selección única (o ninguna si `allowNone`). */
 export function chipGroup({ options, value = null, onChange, allowNone = true, scroll = true, ariaLabel }) {
-  const el = h('div', { class: ['chips', scroll && 'chips-scroll'], role: 'listbox', 'aria-label': ariaLabel });
+  const el = h('div', { class: ['chips', scroll && 'chips-scroll'], role: 'group', 'aria-label': ariaLabel });
   let cur = value;
   const render = () => {
     clear(el);
     for (const o of options) {
       const sel = o.value === cur;
       el.appendChild(h('button', {
-        type: 'button', class: ['chip', sel && 'selected', o.tone && `chip-${o.tone}`], role: 'option', 'aria-selected': sel ? 'true' : 'false',
+        type: 'button', class: ['chip', sel && 'selected', o.tone && `chip-${o.tone}`], 'aria-pressed': sel ? 'true' : 'false',
         onClick: () => { cur = sel && allowNone ? null : o.value; render(); haptic(); onChange?.(cur); },
       }, o.emoji ? h('span', { class: 'chip-emoji', 'aria-hidden': 'true' }, o.emoji) : null, o.label, o.count != null ? h('span', { class: 'chip-count' }, o.count) : null));
     }
@@ -213,10 +220,10 @@ export function chipGroup({ options, value = null, onChange, allowNone = true, s
 }
 
 /** Stepper de cantidad con campo editable. */
-export function quantityStepper({ value, unit, name = 'quantity', onChange, min = 0 }) {
+export function quantityStepper({ value, unit, name = 'quantity', onChange, min = 0, max = Infinity }) {
   const input = numberInput({ name, value: formatNumber(value).replace(/\./g, ''), 'aria-label': 'Cantidad', class: 'input input-number stepper-input' });
   const read = () => { const n = parseNumber(input.value); return Number.isFinite(n) ? n : 0; };
-  const write = (n) => { input.value = formatNumber(Math.max(min, Math.round(n * 1000) / 1000)).replace(/\./g, ''); onChange?.(read()); };
+  const write = (n) => { input.value = formatNumber(Math.min(max, Math.max(min, Math.round(n * 1000) / 1000))).replace(/\./g, ''); onChange?.(read()); };
   let curUnit = unit;
   const el = h('div', { class: 'stepper' },
     h('button', { type: 'button', class: 'stepper-btn', 'aria-label': 'Menos', onClick: () => { haptic(); write(read() - stepFor(curUnit, read())); } }, icon('minus', { size: 18 })),

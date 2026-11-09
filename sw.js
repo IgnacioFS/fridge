@@ -17,7 +17,10 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE_VERSION).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  // cache: 'reload' evita rellenar la caché nueva con archivos viejos de la caché HTTP.
+  event.waitUntil(caches.open(CACHE_VERSION)
+    .then((c) => c.addAll(ASSETS.map((u) => new Request(u, { cache: 'reload' }))))
+    .then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (event) => {
@@ -37,11 +40,10 @@ self.addEventListener('fetch', (event) => {
     return;
   }
   // Caché primero, actualizando en segundo plano.
-  event.respondWith(caches.match(req).then((cached) => {
-    const net = fetch(req).then((res) => {
-      if (res.ok) { const copy = res.clone(); caches.open(CACHE_VERSION).then((c) => c.put(req, copy)); }
-      return res;
-    }).catch(() => cached);
-    return cached || net;
-  }));
+  const net = fetch(req).then(async (res) => {
+    if (res.ok) { const copy = res.clone(); const c = await caches.open(CACHE_VERSION); await c.put(req, copy); }
+    return res;
+  });
+  event.waitUntil(net.catch(() => {}));
+  event.respondWith(caches.match(req).then((cached) => cached || net));
 });

@@ -20,10 +20,18 @@ export async function exportData(store) {
   };
 }
 
+const isObj = (o) => o && typeof o === 'object' && !Array.isArray(o);
+const ok = (o) => isObj(o) && typeof o.id === 'string' && o.id && typeof o.name === 'string';
+
 export function validateBackup(data) {
-  if (!data || data.app !== 'fridge') return 'El archivo no es una copia de FRIDGE';
+  if (!isObj(data) || data.app !== 'fridge') return 'El archivo no es una copia de FRIDGE';
   if (typeof data.schema !== 'number' || data.schema > SCHEMA_VERSION) return 'La copia es de una versión más nueva de la app';
   for (const k of ['inventory', 'recipes', 'shopping']) if (!Array.isArray(data[k])) return 'La copia está incompleta';
+  const bad = 'La copia está dañada: no se ha cambiado nada';
+  if (!data.inventory.every((x) => ok(x) && Number.isFinite(x.quantity) && typeof x.unit === 'string')) return bad;
+  if (!data.shopping.every((x) => ok(x) && Number.isFinite(x.quantity) && typeof x.unit === 'string' && Array.isArray(x.sources ?? []))) return bad;
+  if (!data.recipes.every((x) => ok(x) && Array.isArray(x.ingredients) && x.ingredients.every((g) => isObj(g) && typeof g.name === 'string'))) return bad;
+  if (data.images && (!Array.isArray(data.images) || !data.images.every((i) => isObj(i) && typeof i.id === 'string' && typeof i.data === 'string'))) return bad;
   return null;
 }
 
@@ -31,15 +39,13 @@ export function validateBackup(data) {
 export async function importData(store, data) {
   const err = validateBackup(data);
   if (err) throw new Error(err);
-  const r = store.repos;
-  await Promise.all([r.inventory.clear(), r.recipes.clear(), r.shopping.clear(), r.images.clear()]);
-  await r.inventory.putMany(data.inventory);
-  await r.recipes.putMany(data.recipes);
-  await r.shopping.putMany(data.shopping);
-  for (const img of data.images || []) {
-    await r.images.put({ id: img.id, blob: base64ToBlob(img.data, img.type) });
-  }
-  if (data.settings) await r.meta.put({ id: 'settings', value: data.settings });
+  // Se prepara todo antes de tocar nada; después, una única transacción (todo o nada).
+  const images = (data.images || []).map((img) => ({ id: img.id, blob: base64ToBlob(img.data, img.type) }));
+  const sources = (x) => ({ ...x, sources: x.sources || [] });
+  await store.serial(() => store.repos.replaceAll({
+    inventory: data.inventory, recipes: data.recipes, shopping: data.shopping.map(sources), images,
+    meta: [{ id: 'schema', value: SCHEMA_VERSION }, ...(data.settings ? [{ id: 'settings', value: data.settings }] : [])],
+  }));
   store.imageURLs.forEach((u) => URL.revokeObjectURL(u));
   store.imageURLs.clear();
   await store.load();

@@ -9,7 +9,7 @@ import { APP_VERSION } from '../../version.js';
 
 export function openSettings(ctx) {
   const { store } = ctx;
-  const soon = quantityStepper({ value: store.state.settings.soonDays, unit: 'ud', min: 1, onChange: (v) => {
+  const soon = quantityStepper({ value: store.state.settings.soonDays, unit: 'ud', min: 1, max: 30, onChange: (v) => {
     const n = Math.round(v);
     if (n >= 1 && n <= 30) store.setSettings({ soonDays: n });
   } });

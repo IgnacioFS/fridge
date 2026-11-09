@@ -49,6 +49,10 @@ export function openItemForm(ctx, { item = null, draft = null, notice = null, on
     }, h('span', { class: 'chip-emoji', 'aria-hidden': 'true' }, c.emoji), c.label)));
   };
   renderCats();
+  if (!categoryTouched && base.name) {
+    const { category } = store.suggestionsFor(base.name);
+    if (category) { catHidden.value = category; renderCats(); if (!editing && !draft?.location) loc.setValue(defaultLocationFor(category)); }
+  }
 
   name.addEventListener('input', () => {
     if (categoryTouched) return;

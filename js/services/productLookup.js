@@ -101,7 +101,7 @@ export class ProductLookup {
 
     const local = this.localSource().find((x) => x.barcode === normalized);
     if (local) {
-      return { result: { barcode: normalized, name: local.name, brand: local.brand, category: local.category, imageId: local.imageId, quantity: null, unit: local.unit, source: 'local' }, code: normalized };
+      return { result: { barcode: normalized, name: local.name, brand: local.brand, category: local.category, quantity: null, unit: local.unit, source: 'local' }, code: normalized };
     }
     if (isOffline()) throw new LookupError('offline', 'Sin conexión a Internet');
     let lastError = null;

@@ -72,10 +72,10 @@ export function HomeView(ctx) {
     const attentionSection = needs.length || outOnly.length ? [
       h('div', { class: 'section-header' }, h('h2', null, 'Necesita atención'),
         h('button', { type: 'button', class: 'link', onClick: () => { setInventoryFilter({ status: att.expired.length ? 'expired' : att.soon.length ? 'soon' : 'out' }); ctx.navigate('#/inventario'); } }, 'Ver todo')),
-      att.expired.length || att.soon.length ? h('div', { class: 'att-pills' },
+      h('div', { class: 'att-pills' },
         att.expired.length ? h('button', { type: 'button', class: 'att-pill danger', onClick: () => { setInventoryFilter({ status: 'expired' }); ctx.navigate('#/inventario'); } }, icon('alert', { size: 15 }), `${att.expired.length} caducado${att.expired.length > 1 ? 's' : ''}`) : null,
         att.soon.length ? h('button', { type: 'button', class: 'att-pill warn', onClick: () => { setInventoryFilter({ status: 'soon' }); ctx.navigate('#/inventario'); } }, icon('clock', { size: 15 }), `${att.soon.length} caduca${att.soon.length > 1 ? 'n' : ''} pronto`) : null,
-        att.out.length ? h('button', { type: 'button', class: 'att-pill', onClick: () => { setInventoryFilter({ status: 'out' }); ctx.navigate('#/inventario'); } }, icon('box', { size: 15 }), `${att.out.length} agotado${att.out.length > 1 ? 's' : ''}`) : null) : null,
+        att.out.length ? h('button', { type: 'button', class: 'att-pill', onClick: () => { setInventoryFilter({ status: 'out' }); ctx.navigate('#/inventario'); } }, icon('box', { size: 15 }), `${att.out.length} agotado${att.out.length > 1 ? 's' : ''}`) : null),
       h('div', { class: 'list' }, [...needs, ...outOnly].slice(0, 5).map((it) => itemRow(ctx, it, { showLocation: true }))),
     ] : [h('div', { class: 'card card-pad all-good' }, icon('check', { size: 20, stroke: 2.4 }), h('span', null, 'Nada caduca en los próximos días.'))];
 

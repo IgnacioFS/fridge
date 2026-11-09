@@ -51,11 +51,12 @@ export function openScanner(ctx) {
     if (!cameraSupported()) { showError('Este navegador no permite usar la cámara. Puedes escribir el código o añadir el producto a mano.'); return; }
     try {
       await scanner.start();
+      if (closed || !scanner.running) return;
       status.textContent = 'Apunta al código de barras dentro del recuadro';
       torchBtn.hidden = !scanner.hasTorch;
     } catch (e) {
       const msg = e instanceof ScannerError ? {
-        denied: 'Sin permiso para usar la cámara. Actívalo en Ajustes › Safari › Cámara (o en Ajustes › FRIDGE si la instalaste) y vuelve a intentarlo.',
+        denied: 'Sin permiso para usar la cámara. Revisa Ajustes › Safari › Cámara (debe estar en «Preguntar» o «Permitir») y vuelve a intentarlo.',
         notfound: 'No se ha encontrado ninguna cámara.',
         busy: 'La cámara está ocupada por otra app. Ciérrala e inténtalo de nuevo.',
         insecure: 'La cámara solo funciona si la app se abre desde una dirección segura (https).',
@@ -73,6 +74,7 @@ export function openScanner(ctx) {
 
   let busy = false;
   async function handleCode(code) {
+    if (closed) return;
     busy = true;
     scanner.stop();
     replace(status, h('span', { class: 'spinner small' }), ` Buscando ${code}…`);
@@ -81,6 +83,7 @@ export function openScanner(ctx) {
       const r = await ctx.lookup.lookup(code);
       result = r.result;
       code = r.code;
+      if (closed) return;
       if (result?.source === 'local') {
         // Ya existe en casa con ese código: ofrecer sumar.
         const existing = ctx.store.state.inventory.filter((x) => x.barcode === code);
@@ -103,6 +106,7 @@ export function openScanner(ctx) {
           : 'No se pudo consultar Open Food Facts';
       notice = { tone: 'warn', ic: 'wifiOff', text: `${why}. Puedes añadir el producto a mano; el código ${code} se guarda igualmente.` };
     }
+    if (closed) return;
     close();
     openItemForm(ctx, { draft: { ...(result || {}), barcode: code }, notice });
   }

@@ -80,8 +80,13 @@ export function addToExisting(item, quantity, unit, { expiry, now } = {}) {
   const add = convert(quantity, unit, item.unit);
   if (add === null) return null;
   const next = { ...item, quantity: round3(Number(item.quantity) + add), updatedAt: now };
-  // Si se indica caducidad, se conserva la más próxima (criterio conservador).
-  if (expiry) next.expiry = item.expiry && item.expiry < expiry && Number(item.quantity) > 0 ? item.expiry : expiry;
+  if (!(Number(item.quantity) > 0)) {
+    // Estaba agotado: la caducidad anterior ya no aplica.
+    next.expiry = expiry || null;
+  } else if (expiry) {
+    // Con existencias: se conserva la fecha más próxima (criterio conservador).
+    next.expiry = item.expiry && item.expiry < expiry ? item.expiry : expiry;
+  }
   return next;
 }
 

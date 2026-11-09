@@ -21,11 +21,13 @@ export function scaleQuantity(quantity, baseServings, servings) {
  *   expiredItems: [...],         // coinciden pero están caducados (no cuentan)
  * }
  */
-export function evaluateIngredient(ingredient, inventory, { servings, baseServings, now = new Date() } = {}) {
+export function evaluateIngredient(ingredient, inventory, { servings, baseServings, now = new Date(), consumed = null } = {}) {
   const unit = ingredient.unit;
   const required = scaleQuantity(ingredient.quantity, baseServings ?? servings, servings ?? baseServings);
+  const needMilli = isUnit(unit) ? toBaseMilli(required, unit) : 0;
   const usedItems = [];
   const incompatibleItems = [];
+  const relatedItems = [];
   const expiredItems = [];
   let haveMilli = 0;
 
@@ -35,34 +37,45 @@ export function evaluateIngredient(ingredient, inventory, { servings, baseServin
     if (!kind) continue;
     if (!(Number(item.quantity) > 0)) continue;
     if (expiryStatus(item.expiry, now) === 'expired') { expiredItems.push(item); continue; }
+    if (kind === 'related') { relatedItems.push(item); continue; }
     if (!isUnit(unit) || !areCompatible(item.unit, unit)) { incompatibleItems.push(item); continue; }
+    // Lo que ya han usado otros ingredientes de la misma receta no está disponible.
+    const total = toBaseMilli(item.quantity, item.unit);
+    const left = total - (consumed?.get(item.id) || 0);
+    if (left <= 0) continue;
+    const take = Math.min(left, Math.max(needMilli - haveMilli, 0));
+    if (consumed && take > 0) consumed.set(item.id, (consumed.get(item.id) || 0) + take);
     usedItems.push({ item, kind });
-    haveMilli += toBaseMilli(item.quantity, item.unit);
+    haveMilli += left;
   }
 
-  const needMilli = isUnit(unit) ? toBaseMilli(required, unit) : 0;
   const available = isUnit(unit) ? fromBaseMilli(Math.min(haveMilli, needMilli), unit) : 0;
   const missingMilli = Math.max(needMilli - haveMilli, 0);
   const missing = isUnit(unit) ? fromBaseMilli(missingMilli, unit) : required;
 
   let status;
   if (needMilli > 0 && missingMilli === 0) status = 'available';
-  else if (usedItems.length === 0 && incompatibleItems.length > 0) status = 'incomparable';
+  else if (usedItems.length === 0 && (incompatibleItems.length > 0 || relatedItems.length > 0)) status = 'incomparable';
   else if (haveMilli > 0) status = 'partial';
   else status = 'missing';
 
   return {
     ingredient, required, unit, status, available, missing,
     totalAvailable: isUnit(unit) ? fromBaseMilli(haveMilli, unit) : 0,
-    usedItems, incompatibleItems, expiredItems,
+    usedItems, incompatibleItems, relatedItems, expiredItems,
   };
 }
 
 /** Evalúa la receta completa. */
 export function evaluateRecipe(recipe, inventory, { servings, now = new Date() } = {}) {
   const s = Number(servings) > 0 ? Number(servings) : recipe.servings;
-  const results = (recipe.ingredients || []).map((ing) =>
-    evaluateIngredient(ing, inventory, { servings: s, baseServings: recipe.servings, now }));
+  // Se reparte el inventario: los ingredientes más específicos («tomate pera») eligen antes que
+  // los genéricos («tomate»), y un mismo producto no se cuenta dos veces.
+  const consumed = new Map();
+  const ings = recipe.ingredients || [];
+  const order = ings.map((g, i) => i).sort((x, y) => (ings[y].key || '').split(' ').length - (ings[x].key || '').split(' ').length || x - y);
+  const results = new Array(ings.length);
+  for (const i of order) results[i] = evaluateIngredient(ings[i], inventory, { servings: s, baseServings: recipe.servings, now, consumed });
   const counted = results.filter((r) => !r.ingredient.optional);
   const ready = counted.filter((r) => r.status === 'available').length;
   const missingList = counted.filter((r) => r.status === 'partial' || r.status === 'missing');
@@ -82,11 +95,17 @@ export function evaluateRecipe(recipe, inventory, { servings, now = new Date() }
 /** Lo que falta, listo para añadir a la compra. */
 export function missingForShopping(evaluation, { includeIncomparable = [] } = {}) {
   const out = [];
+  const push = (r, quantity) => {
+    // Dos ingredientes iguales en la misma receta («ajo» y «ajos») se suman en una línea.
+    const same = out.find((o) => o.key === r.ingredient.key && areCompatible(o.unit, r.unit));
+    if (same) same.quantity = fromBaseMilli(toBaseMilli(same.quantity, same.unit) + toBaseMilli(quantity, r.unit), same.unit);
+    else out.push({ name: r.ingredient.name, key: r.ingredient.key, quantity, unit: r.unit });
+  };
   for (const r of evaluation.results) {
     if (r.status === 'partial' || r.status === 'missing') {
-      if (r.missing > 0) out.push({ name: r.ingredient.name, key: r.ingredient.key, quantity: r.missing, unit: r.unit });
+      if (r.missing > 0) push(r, r.missing);
     } else if (r.status === 'incomparable' && includeIncomparable.includes(r.ingredient.id)) {
-      out.push({ name: r.ingredient.name, key: r.ingredient.key, quantity: r.required, unit: r.unit });
+      push(r, r.required);
     }
   }
   return out;

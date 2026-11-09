@@ -193,7 +193,7 @@ await T('8/18. Receta con todo disponible usando unidades convertibles (kg/l)', 
 await T('9b. Unidades incompatibles: avisa y deja decidir', async () => {
   const id = await store(async () => (await window.__fridge.store.saveRecipe({ name: 'Bizcocho', servings: 1, ingredients: [{ name: 'Huevos', quantity: 200, unit: 'g' }] })).id);
   await page.goto(`${BASE}#/receta/${id}`); await sleep(500);
-  assert(await page.locator('.banner:has-text("Unidades distintas")').isVisible(), 'sin aviso');
+  assert(await page.locator('.banner:has-text("Revisa algunos ingredientes")').isVisible(), 'sin aviso');
   assert(await page.locator('.row-sub:has-text("no se puede comparar")').isVisible(), 'sin detalle');
   await page.click('.ing-decide .chip:text("Lo tengo")'); await sleep(200);
   assert(await page.locator('.avail-card.good').isVisible(), '“Lo tengo” no cuenta');
@@ -353,6 +353,46 @@ await T('Permiso de cámara denegado: mensaje y alternativas', async () => {
   assert(await p2.locator('.scan-error:has-text("Sin permiso")').isVisible(), 'sin mensaje');
   assert(await p2.locator('.scan-pill:has-text("Añadir a mano")').isVisible(), 'sin alternativa');
   await p2.close();
+});
+
+await T('Cerrar el escáner mientras se abre la cámara la apaga', async () => {
+  const p2 = await context.newPage();
+  await p2.addInitScript(() => {
+    const orig = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+    window.__streams = [];
+    navigator.mediaDevices.getUserMedia = (c) => new Promise((res, rej) => setTimeout(() => orig(c).then((s) => { window.__streams.push(s); res(s); }, rej), 800));
+  });
+  await p2.goto(`${BASE}#/inventario`); await p2.waitForSelector('.screen-title');
+  await p2.click('[aria-label="Escanear código"]'); await p2.waitForTimeout(100);
+  await p2.click('.scan-round[aria-label="Cerrar"]'); await p2.waitForTimeout(1500);
+  const live = await p2.evaluate(() => window.__streams.flatMap((s) => s.getTracks()).filter((t) => t.readyState === 'live').length);
+  assert(live === 0, `${live} pistas de cámara siguen activas`);
+  assert(!(await p2.locator('.sheet-wrap.open').count()), 'se abrió un formulario tras cerrar');
+  await p2.close();
+});
+
+await T('Doble toque al confirmar la compra no duplica el inventario', async () => {
+  await tab('compra');
+  await page.fill('.quick-input', '4 yogures'); await page.press('.quick-input', 'Enter'); await sleep(300);
+  await page.click('.shop-row:has(.row-title:text-is("Yogures")) .check'); await sleep(300);
+  await page.click('.done-list .shop-row:has(.row-title:text-is("Yogures")) button:has-text("Al inventario")'); await sleep(400);
+  const n0 = await store(() => window.__fridge.store.state.inventory.length);
+  await sheet().locator('.sheet-footer button[type=submit]').dblclick(); await sleep(500);
+  const n1 = await store(() => window.__fridge.store.state.inventory.length);
+  const idb = await store(async () => (await window.__fridge.store.repos.inventory.getAll()).length);
+  assert(n1 - n0 <= 1 && idb === n1, `antes ${n0}, después ${n1}, almacenado ${idb}`);
+});
+
+await T('Formulario de receta: el error aparece en la fila correcta', async () => {
+  await tab('recetas');
+  await page.click('[aria-label="Nueva receta"]'); await sleep(400);
+  const sh = sheet();
+  await sh.locator('[name=name]').fill('Prueba');
+  await sh.locator('button:has-text("Añadir ingrediente")').click();
+  await sh.locator('.ing-edit').nth(1).locator('.ing-name').fill('Sal');
+  await submitSheet();
+  assert(await sh.locator('.ing-edit').nth(1).locator('.field-error:text("Cantidad no válida")').isVisible(), 'error no visible en la fila 2');
+  await closeSheets();
 });
 
 // ─────────────── Copia de seguridad (exportar → importar)

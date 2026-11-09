@@ -12,6 +12,7 @@ import { formatQuantity, isUnit } from '../../domain/units.js';
 import { normalizeKey } from '../../domain/matching.js';
 import { parseNumber } from '../../domain/validation.js';
 import { ValidationError } from '../../data/store.js';
+import { pressKey } from '../components.js';
 
 /** «2 l leche», «leche 2l», «6 huevos», «pan» → {name, quantity, unit} */
 export function parseQuickAdd(text) {
@@ -42,10 +43,12 @@ export function ShoppingView(ctx) {
   const countEl = h('span', { class: 'screen-subtitle' });
   const quick = textInput({ placeholder: 'Añadir: «2 l leche», «pan»…', enterkeyhint: 'done', 'aria-label': 'Añadir producto', class: 'input quick-input', list: 'shop-names' });
   const names = h('span');
+  let adding = false;
   const quickForm = h('form', { class: 'quick-add', onSubmit: async (e) => {
     e.preventDefault();
     const p = parseQuickAdd(quick.value);
-    if (!p) return;
+    if (!p || adding) return;
+    adding = true;
     try {
       const twin = findIncompatibleTwin(store.state.shopping, normalizeKey(p.name), p.unit);
       const { item, merged } = await store.addShopping(p);
@@ -55,7 +58,7 @@ export function ShoppingView(ctx) {
       else if (twin) toast(`«${item.name}» ya estaba en ${twin.unit}; no se puede sumar a ${item.unit}`);
     } catch (err) {
       if (err instanceof ValidationError) toast(Object.values(err.errors)[0], { tone: 'danger' });
-    }
+    } finally { adding = false; }
   } }, names, quick, h('button', { type: 'submit', class: 'icon-btn accent', 'aria-label': 'Añadir' }, icon('plus', { size: 20, stroke: 2.2 })));
 
   const el = h('div', { class: 'view-shopping' },
@@ -120,7 +123,7 @@ function shopRow(ctx, it) {
 
   return h('div', { class: ['row', 'no-thumb', 'shop-row', it.checked && 'checked'], dataset: { id: it.id } },
     check,
-    h('div', { class: 'row-main', role: 'button', tabindex: '0', onClick: () => openShoppingForm(ctx, store.getShopping(it.id)) },
+    h('div', { class: 'row-main', role: 'button', tabindex: '0', onClick: () => openShoppingForm(ctx, store.getShopping(it.id)), onKeydown: pressKey },
       h('span', { class: 'row-title' }, it.name),
       it.checked ? h('span', { class: 'row-sub' }, formatQuantity(it.quantity, it.unit)) : null,
       tags),
@@ -211,7 +214,7 @@ export function openPurchaseSheet(ctx, shoppingId, { onDone } = {}) {
 
   function renderTargets() {
     const cands = mergeCandidates(store.state.inventory, { key: s.key, unit: unit.value });
-    if (!cands.length) { target = null; replace(targetsWrap, ); return; }
+    if (!cands.length) { target = null; replace(targetsWrap); loc.closest('.field').style.display = ''; return; }
     if (!userPicked) target = (cands.find((c) => c.location === loc.getValue()) || cands[0]).id;
     if (target && !cands.some((c) => c.id === target)) target = null;
     replace(targetsWrap, 
@@ -239,7 +242,11 @@ export function openPurchaseSheet(ctx, shoppingId, { onDone } = {}) {
   const sheet = openSheet({ title: 'Al inventario', content: form, primary: { label: 'Añadir', onClick: () => confirm() } });
   renderTargets();
 
+  let busy = false;
   async function confirm() {
+    if (busy) return;
+    busy = true; sheet.setBusy(true);
+    form.querySelector('.sheet-footer button').disabled = true;
     try {
       const saved = await store.purchaseToInventory(s.id, {
         quantity: stepper.input.value, unit: unit.value, location: loc.getValue(), expiry: expiry.getValue() || null,
@@ -252,6 +259,9 @@ export function openPurchaseSheet(ctx, shoppingId, { onDone } = {}) {
     } catch (e) {
       if (e instanceof ValidationError) showErrors(form, e.errors);
       else toast(e.message || 'No se pudo añadir', { tone: 'danger' });
+    } finally {
+      busy = false;
+      if (!sheet.closed) { sheet.setBusy(false); form.querySelector('.sheet-footer button').disabled = false; }
     }
   }
 }

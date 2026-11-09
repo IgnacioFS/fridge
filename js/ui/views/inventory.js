@@ -1,7 +1,7 @@
 // Inventario: búsqueda, filtros por ubicación/categoría/estado, orden y ajuste rápido de cantidades.
 import { h, haptic, replace } from '../dom.js';
 import { icon, LOCATION_ICON } from '../icons.js';
-import { segmented, chipGroup, searchField, emptyState, expiryBadge, thumb, iconButton, toast, actionSheet } from '../components.js';
+import { segmented, chipGroup, searchField, emptyState, expiryBadge, thumb, iconButton, toast, actionSheet, pressKey } from '../components.js';
 import { CATEGORIES, LOCATIONS, category as catOf, location as locOf } from '../../domain/catalog.js';
 import { filterItems, sortItems, attention } from '../../domain/inventory.js';
 import { formatQuantity, stepFor } from '../../domain/units.js';
@@ -137,7 +137,7 @@ export function itemRow(ctx, it, { showLocation = false, compact = false } = {})
 
   return h('div', { class: ['row', out && 'out'], dataset: { id: it.id } },
     thumb(store, { imageId: it.imageId, emoji: cat.emoji }),
-    h('div', { class: 'row-main', role: 'button', tabindex: '0', onClick: () => openItemForm(ctx, { item: store.getItem(it.id) }), onKeydown: (e) => { if (e.key === 'Enter') openItemForm(ctx, { item: store.getItem(it.id) }); } },
+    h('div', { class: 'row-main', role: 'button', tabindex: '0', onClick: () => openItemForm(ctx, { item: store.getItem(it.id) }), onKeydown: pressKey },
       h('span', { class: 'row-title' }, it.name),
       sub.length ? h('span', { class: 'row-sub' }, sub) : null),
     h('div', { class: 'row-trail' }, qty, minus));

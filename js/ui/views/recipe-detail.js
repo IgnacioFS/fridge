@@ -1,7 +1,7 @@
 // Detalle de receta: raciones, comparación con el inventario y envío de faltantes a la compra.
 import { h, haptic, replace } from '../dom.js';
 import { icon } from '../icons.js';
-import { emptyState, iconButton, actionSheet, confirmDialog, toast, thumb, banner, btn } from '../components.js';
+import { emptyState, iconButton, actionSheet, confirmDialog, toast, thumb, banner, btn, pressKey } from '../components.js';
 import { evaluateRecipe, missingForShopping } from '../../domain/recipes.js';
 import { pendingQuantityFor } from '../../domain/shopping.js';
 import { formatQuantity, formatSmart } from '../../domain/units.js';
@@ -48,7 +48,10 @@ export function RecipeDetailView(ctx, { id }) {
     const addBtn = missing.length
       ? btn(`Añadir ${missing.length === 1 ? 'el que falta' : `los ${missing.length} que faltan`} a la compra`, {
         kind: 'primary', icon: 'cart', cls: 'btn-block',
-        onClick: async () => {
+        onClick: async (e) => {
+          const b = e.currentTarget;
+          if (b.disabled) return;
+          b.disabled = true;
           const res = await store.addMissingToShopping(r, missing);
           haptic();
           const parts = [];
@@ -72,7 +75,7 @@ export function RecipeDetailView(ctx, { id }) {
           r.prepMinutes ? h('span', { class: 'meta-pill' }, icon('clock', { size: 15 }), `${r.prepMinutes} min`) : null,
           servingsCtl)),
       summary,
-      pendingDecision.length ? banner(h('span', null, h('b', null, 'Unidades distintas. '), 'Algún ingrediente está en tu inventario con otra unidad y no se puede comparar. Indica si lo tienes o si quieres comprarlo.'), { tone: 'warn', ic: 'alert' }) : null,
+      pendingDecision.length ? banner(h('span', null, h('b', null, 'Revisa algunos ingredientes. '), 'Algún ingrediente está en casa con otra unidad o con un producto parecido y no se puede comprobar solo. Indica si lo tienes o si quieres comprarlo.'), { tone: 'warn', ic: 'alert' }) : null,
       h('h2', { class: 'group-label' }, 'Ingredientes', servings !== r.servings ? h('span', { class: 'group-count' }, `para ${servings}`) : null),
       ingList,
       addBtn ? h('div', { class: 'sticky-cta' }, addBtn) : null,
@@ -90,12 +93,16 @@ export function RecipeDetailView(ctx, { id }) {
     else if (status === 'missing') { ic = 'close'; tone = 'danger'; detail = `Faltan ${formatSmart(res.missing, res.unit)}`; }
     else {
       ic = 'alert'; tone = decision === 'have' ? 'ok' : 'warn';
+      const related = res.relatedItems || [];
       const have = res.incompatibleItems.map((i) => formatQuantity(i.quantity, i.unit)).join(' + ');
-      detail = decision === 'have' ? `Marcado como disponible (tienes ${have})` : decision === 'buy' ? 'Se añadirá a la compra' : `Tienes ${have}: no se puede comparar`;
+      const doubt = res.incompatibleItems.length
+        ? `Tienes ${have}: no se puede comparar`
+        : `¿Sirve ${related.map((i) => `«${i.name}»`).join(' o ')}?`;
+      detail = decision === 'have' ? 'Marcado como disponible' : decision === 'buy' ? 'Se añadirá a la compra' : doubt;
     }
     if (g.optional) detail = `Opcional · ${detail}`;
     const open = expanded.has(g.id);
-    const sources = [...res.usedItems.map((u) => u.item), ...res.incompatibleItems];
+    const sources = [...res.usedItems.map((u) => u.item), ...res.incompatibleItems, ...(res.relatedItems || [])];
     const extra = open ? h('div', { class: 'ing-extra' },
       sources.length ? sources.map((it) => h('div', { class: 'ing-source' }, h('span', { class: `loc-dot loc-${it.location}` }), `${it.name} · ${formatQuantity(it.quantity, it.unit)} · ${locOf(it.location).label}`))
         : h('div', { class: 'ing-source muted' }, 'No hay nada parecido en tu inventario.'),
@@ -103,7 +110,7 @@ export function RecipeDetailView(ctx, { id }) {
 
     return h('div', { class: ['row', 'no-thumb', 'ing-row', `ing-${tone}`] },
       h('div', { class: ['ing-status', `tone-${tone}`], 'aria-hidden': 'true' }, icon(ic, { size: 15, stroke: 2.6 })),
-      h('div', { class: 'row-main', role: 'button', tabindex: '0', 'aria-expanded': open ? 'true' : 'false', onClick: () => { if (open) expanded.delete(g.id); else expanded.add(g.id); render(); } },
+      h('div', { class: 'row-main', role: 'button', tabindex: '0', 'aria-expanded': open ? 'true' : 'false', onKeydown: pressKey, onClick: () => { if (open) expanded.delete(g.id); else expanded.add(g.id); render(); } },
         h('span', { class: 'row-title ing-title' }, h('span', null, g.name), h('span', { class: 'ing-qty' }, formatSmart(res.required, res.unit))),
         h('span', { class: ['row-sub', `text-${tone}`] }, detail),
         pending !== null && status !== 'available' ? h('span', { class: 'row-sub' }, h('span', { class: 'tag' }, icon('cart', { size: 12 }), `En la lista: ${formatSmart(pending, g.unit)}`)) : null,

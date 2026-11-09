@@ -76,7 +76,7 @@ test('normaliza nombres a claves', () => {
 test('coincidencias ingrediente ↔ inventario', () => {
   assert.equal(matchKind('leche', 'leche entera'), 'prefix');
   assert.equal(matchKind('tomate', 'tomate'), 'exact');
-  assert.equal(matchKind('tomate', 'tomate frito'), 'prefix');
+  assert.equal(matchKind('tomate', 'tomate frito'), 'related');
   assert.equal(matchKind('pan', 'pan rallado'), 'prefix');
   assert.equal(matchKind('pan', 'panceta'), null);
   assert.equal(matchKind('queso', 'requeson'), null);
