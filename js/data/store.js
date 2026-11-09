@@ -48,6 +48,14 @@ export class Store extends EventTarget {
     };
     if (!meta.find((m) => m.id === 'schema')) await this.repos.meta.put({ id: 'schema', value: SCHEMA_VERSION });
     this.emit('load');
+    this.collectOrphanImages().catch(() => {});
+  }
+
+  /** Borra fotos que ya no usa ningún alimento ni receta (p. ej. tras eliminar). */
+  async collectOrphanImages() {
+    const used = new Set([...this.state.inventory, ...this.state.recipes].map((x) => x.imageId).filter(Boolean));
+    const all = await this.repos.images.getAll();
+    for (const img of all) if (!used.has(img.id)) await this.repos.images.delete(img.id);
   }
 
   emit(reason) { this.dispatchEvent(new CustomEvent('change', { detail: { reason } })); }
@@ -87,6 +95,20 @@ export class Store extends EventTarget {
     const prev = this.getItem(id);
     if (!prev) return null;
     const next = Inv.adjustQuantity(prev, delta, this.factory.now());
+    await this.repos.inventory.put(next);
+    this.replaceIn('inventory', next);
+    this.emit('inventory');
+    return next;
+  }
+
+  /** Suma una cantidad (en unidad compatible) a un producto existente. */
+  async mergeIntoItem(id, { quantity, unit, expiry = null }) {
+    const prev = this.getItem(id);
+    if (!prev) throw new Error('El producto ya no existe');
+    const qty = Number(String(quantity).replace(',', '.'));
+    if (!(qty > 0)) throw new ValidationError({ quantity: 'Cantidad no válida' });
+    const next = Inv.addToExisting(prev, qty, unit, { expiry: expiry || null, now: this.factory.now() });
+    if (!next) throw new ValidationError({ unit: 'Unidad incompatible con el producto elegido' });
     await this.repos.inventory.put(next);
     this.replaceIn('inventory', next);
     this.emit('inventory');
@@ -218,15 +240,7 @@ export class Store extends EventTarget {
     if (!s) throw new Error('El producto ya no está en la lista');
     let saved;
     if (opts.mode === 'merge' && opts.targetId) {
-      const target = this.getItem(opts.targetId);
-      if (!target) throw new Error('El producto del inventario ya no existe');
-      const qty = Number(String(opts.quantity).replace(',', '.'));
-      if (!(qty > 0)) throw new ValidationError({ quantity: 'Cantidad no válida' });
-      const next = Inv.addToExisting(target, qty, opts.unit, { expiry: opts.expiry || null, now: this.factory.now() });
-      if (!next) throw new ValidationError({ unit: 'Unidad incompatible con el producto elegido' });
-      await this.repos.inventory.put(next);
-      this.replaceIn('inventory', next);
-      saved = next;
+      saved = await this.mergeIntoItem(opts.targetId, opts);
     } else {
       saved = await this.saveItem({
         name: s.name, category: s.category, quantity: opts.quantity, unit: opts.unit,

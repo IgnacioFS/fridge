@@ -1,0 +1,87 @@
+/* FRIDGE — base y layout */
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+html, body { margin: 0; height: 100%; }
+body {
+  font-family: var(--font);
+  font-size: var(--fs-body);
+  line-height: 1.35;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+body.has-sheet { overflow: hidden; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; background: none; border: 0; padding: 0; touch-action: manipulation; }
+button:disabled { opacity: 0.45; cursor: default; }
+:focus-visible { outline: 2.5px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+img { display: block; max-width: 100%; }
+h1, h2, h3, p { margin: 0; }
+.icon { flex: none; display: block; }
+.visually-hidden { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ── App shell */
+#app { min-height: 100%; display: flex; flex-direction: column; }
+#view {
+  flex: 1;
+  padding: calc(var(--safe-top) + var(--s2)) var(--s4) calc(var(--tabbar-h) + var(--safe-bottom) + 96px);
+  max-width: 720px; width: 100%; margin: 0 auto;
+}
+.view-enter { animation: viewIn var(--t-med) var(--ease); }
+@keyframes viewIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* ── Cabecera de pantalla (título grande iOS) */
+.screen-header { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--s3); padding: var(--s3) 0 var(--s3); min-height: 64px; }
+.screen-header .titles { min-width: 0; }
+.screen-title { font-size: var(--fs-large); font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
+.screen-subtitle { font-size: var(--fs-sub); color: var(--text-2); margin-bottom: 2px; text-transform: capitalize; }
+.screen-actions { display: flex; gap: var(--s2); flex: none; }
+
+/* Barra superior compacta (detalle) */
+.topbar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: var(--s2);
+  margin: 0 calc(-1 * var(--s4)); padding: calc(var(--safe-top) + 6px) var(--s3) 6px;
+  background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: saturate(180%) blur(18px); -webkit-backdrop-filter: saturate(180%) blur(18px); }
+.topbar .back { display: inline-flex; align-items: center; gap: 2px; color: var(--accent); font-size: var(--fs-body); padding: 8px 4px; min-height: 44px; }
+.detail #view, #view.detail { padding-top: 0; }
+
+/* ── Barra de pestañas */
+.tabbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  padding: 6px max(var(--s2), env(safe-area-inset-left)) calc(var(--safe-bottom) + 4px);
+  background: color-mix(in srgb, var(--bg-elevated) 82%, transparent);
+  backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-top: 0.5px solid var(--separator);
+}
+.tab { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 0 2px; min-height: 48px; color: var(--text-3); font-size: 10.5px; font-weight: 600; letter-spacing: 0.01em; position: relative; }
+.tab[aria-current="page"] { color: var(--accent); }
+.tab .tab-badge { position: absolute; top: 1px; left: calc(50% + 6px); min-width: 17px; height: 17px; padding: 0 5px; border-radius: 9px; background: var(--danger); color: #fff; font-size: 11px; line-height: 17px; text-align: center; font-weight: 700; }
+
+/* Botón flotante */
+.fab {
+  position: fixed; z-index: 15; right: max(var(--s4), calc((100vw - 720px) / 2 + var(--s4)));
+  bottom: calc(var(--tabbar-h) + var(--safe-bottom) + var(--s4));
+  width: 58px; height: 58px; border-radius: 29px; background: var(--accent); color: var(--on-accent);
+  display: grid; place-items: center; box-shadow: 0 8px 24px color-mix(in srgb, var(--accent) 40%, transparent);
+  transition: transform var(--t-fast) var(--ease);
+}
+.fab:active { transform: scale(0.92); }
+
+/* ── Superposiciones */
+#overlays { position: relative; z-index: 40; }
+#toasts { position: fixed; left: 0; right: 0; bottom: calc(var(--tabbar-h) + var(--safe-bottom) + 12px); z-index: 60; display: flex; justify-content: center; pointer-events: none; padding: 0 var(--s4); }
+body.has-sheet #toasts { bottom: calc(var(--safe-bottom) + 16px); }
+
+/* Pantalla de arranque */
+.boot { min-height: 70vh; display: grid; place-items: center; color: var(--text-3); }
+.spinner { width: 26px; height: 26px; border-radius: 50%; border: 2.5px solid var(--fill-strong); border-top-color: var(--accent); animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (min-width: 720px) {
+  .tabbar { left: 50%; right: auto; transform: translateX(-50%); width: 720px; border-radius: 22px 22px 0 0; }
+}
+a.tab { text-decoration: none; }
+.screen-subtitle { text-transform: none; display: block; }
+.screen-subtitle::first-letter { text-transform: uppercase; }
