@@ -1,1 +1,1 @@
-{"type":"module","private":true,"name":"fridge","scripts":{"test":"node --test tests/unit/*.test.js"}}
+{"type":"module","private":true,"name":"fridge","scripts":{"test":"node --test tests/unit/*.test.js","e2e":"node tests/e2e/e2e.mjs"}}

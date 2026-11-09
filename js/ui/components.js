@@ -14,6 +14,7 @@ const sheetStack = [];
  */
 export function openSheet({ title, content, primary = null, onClose = null, full = false, cancelLabel = 'Cancelar', className = '' }) {
   const root = document.getElementById('overlays');
+  hideToast(); // el aviso no debe tapar los botones de la hoja
   const titleId = nextId('t');
   let closed = false;
   const primaryBtn = primary
@@ -102,6 +103,10 @@ export function actionSheet({ title, actions }) {
 
 // ───────────────────────── Avisos (toast)
 let toastTimer = null;
+export function hideToast() {
+  clearTimeout(toastTimer);
+  document.querySelectorAll('#toasts .toast').forEach((t) => { t.classList.remove('show'); setTimeout(() => t.remove(), 250); });
+}
 export function toast(message, { action = null, onAction = null, duration = 4000, tone = 'default' } = {}) {
   const root = document.getElementById('toasts');
   clear(root);
